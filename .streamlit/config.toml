@@ -2,5 +2,4 @@
 developmentMode = false
 
 [server]
-# port = 8501
-port = 8521
+port = 8501
