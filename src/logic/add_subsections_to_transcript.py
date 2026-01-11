@@ -8,7 +8,7 @@ def add_subsections_to_transcript(text: str) -> str:
     YouTubeトランスクリプトにサブセクション見出し（###）を追加する。
 
     ルール概要:
-    - 時刻形式 (m:ss / mm:ss) ではない単独行で、
+    - 時刻形式: m:ss / mm:ss / h:mm:ss / hh:mm:ssではない単独行で、
       かつ「次の行が時刻」の場合、その行をサブセクションとみなす。
     - サブセクション行は元の位置から削除し、
       直後に続く最初の時刻行の直前に `### ` を付けて挿入する。
@@ -21,7 +21,8 @@ def add_subsections_to_transcript(text: str) -> str:
     Returns:
         サブセクションを付与したトランスクリプト文字列
     """
-    time_pattern = re.compile(r"^\d{1,2}:\d{2}$")
+    # time_pattern = re.compile(r"^\d{1,2}:\d{2}$")
+    time_pattern = re.compile(r"^\d{1,2}:\d{2}(:\d{2})?$")
     lines = text.splitlines()
 
     def is_time(line: str) -> bool:
