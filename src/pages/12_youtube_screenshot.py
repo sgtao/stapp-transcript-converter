@@ -1,14 +1,19 @@
 # 12_youtube_screenshot.py (MoviePy版)
 import base64
+import datetime
 import subprocess
+import tempfile
+
 import streamlit as st
 from pathlib import Path
 from moviepy import VideoFileClip
 
-# ディレクトリ設定
-TEMP_DIR = Path("temp_images")
+# --- 設定 ---
+# システムの一時フォルダを取得（Linuxなら通常 /tmp）
+TEMP_BASE = Path(tempfile.gettempdir())
+IMAGE_DIR = TEMP_BASE / "stapp_images"
+IMAGE_DIR.mkdir(exist_ok=True)
 DOWNLOAD_DIR = Path("downloads")
-TEMP_DIR.mkdir(exist_ok=True)
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
 APP_TITLE = "YouTube Local Screenshoter"
@@ -23,21 +28,19 @@ def get_video_id(url: str) -> str | None:
 
 
 def download_video_low_res(url: str) -> Path | None:
-    """yt-dlpを使って低画質動画をダウンロードする"""
     video_id = get_video_id(url)
     if not video_id:
         return None
 
-    # 拡張子はmp4に固定（視聴互換性のため）
-    output_path = DOWNLOAD_DIR / f"{video_id}.mp4"
+    # /tmp/video_id.mp4 として保存
+    output_path = TEMP_BASE / f"{video_id}.mp4"
 
     if output_path.exists():
         return output_path
 
     try:
-        with st.spinner("動画を低画質で取得中..."):
-            # -f "worst" で最低画質を指定
-            # --merge-output-format mp4 でブラウザ再生可能な形式を担保
+        with st.spinner("YouTubeから低画質動画を取得中..."):
+            # 再生互換性を高めるため mp4 を強制
             subprocess.run(
                 [
                     "yt-dlp",
@@ -54,6 +57,11 @@ def download_video_low_res(url: str) -> Path | None:
     except Exception as e:
         st.error(f"ダウンロード失敗: {e}")
         return None
+
+
+def seconds_to_hms(total_seconds: float) -> str:
+    """秒数を hh:mm:ss 形式に変換"""
+    return str(datetime.timedelta(seconds=int(total_seconds)))
 
 
 def timestamp_to_seconds(ts_str: str) -> float:
@@ -76,72 +84,91 @@ def image_to_base64(image_path: Path) -> str:
 
 def main():
     st.set_page_config(page_title=APP_TITLE, layout="wide")
-    st.title(f"🎬 {APP_TITLE}")
-
-    # 1. URL入力エリア
-    video_url = st.text_input(
-        "YouTube URLを入力してください", placeholder="https://..."
-    )
+    st.title(f"📸 {APP_TITLE}")
 
     # セッション状態の初期化
-    if "local_video_path" not in st.session_state:
-        st.session_state.local_video_path = None
+    if "video_path" not in st.session_state:
+        st.session_state.video_path = None
+    if "last_img" not in st.session_state:
+        st.session_state.last_img = None
+
+    # 1. 入力エリア
+    video_url = st.text_input("YouTube URL", placeholder="https://...")
 
     if video_url:
-        # 動画取得ボタン
-        if st.button("📥 動画を取得（複製ファイル作成）"):
+        with st.expander(
+            "動画を確認する（ここでの再生位置は取得できません）", expanded=True
+        ):
+            st.video(video_url)
+
+        if st.button("📥 動画を取得する"):
             path = download_video_low_res(video_url)
             if path:
-                st.session_state.local_video_path = path
-                st.success("ダウンロード完了！")
+                st.session_state.video_path = path
+                st.rerun()
 
-    # 2. ダウンロード済みの場合の表示
-    if st.session_state.local_video_path:
-        video_path = st.session_state.local_video_path
+    # 2. メインエリア
+    if st.session_state.video_path:
+        video_path = Path(st.session_state.video_path)
 
         st.divider()
-        col_video, col_ctrl = st.columns([2, 1])
+        # col_v, col_c = st.columns([2, 1])
+        col_c, col_i = st.columns(2)
 
-        with col_video:
-            st.subheader("視聴エリア")
-            # ローカルファイルを再生
-            st.video(str(video_path))
+        # with col_v:
+        #     st.caption(f"動画保存先: {video_path}")
+        #     if st.button("動画再生"):
+        #         # 【重要】パスではなくバイナリを渡すことで再生トラブルを回避
+        #         video_bytes = video_path.read_bytes()
+        #         st.video(video_bytes)
 
-        with col_ctrl:
+        with col_c:
             st.subheader("スクショ操作")
-            timestamp = st.text_input("取得秒数 (hh:mm:ss)", value="00:00:01")
 
-            if st.button("📸 スクリーンショットを取得", type="primary"):
-                t_sec = timestamp_to_seconds(timestamp)
-                safe_ts = timestamp.replace(":", "-")
-                img_path = TEMP_DIR / f"screenshot-{safe_ts}.png"
+            # 秒単位での指定（1秒毎の表示に対応しやすい）
+            target_sec = st.number_input(
+                "抽出したい秒数 (秒)",
+                min_value=0,
+                value=0,
+                step=1,
+                help="再生バーの時間を入力してください",
+            )
+
+            st.info(f"確定予定時刻: {seconds_to_hms(target_sec)}")
+
+            if st.button("📸 この瞬間のスクショを確定", type="primary"):
+                safe_ts = seconds_to_hms(target_sec).replace(":", "-")
+                img_path = IMAGE_DIR / f"screenshot-{safe_ts}.png"
 
                 try:
-                    with VideoFileClip(str(video_path)) as clip:
-                        clip.save_frame(str(img_path), t=t_sec)
-                    st.session_state.last_img = img_path
+                    with st.spinner("画像を抽出中..."):
+                        with VideoFileClip(str(video_path)) as clip:
+                            clip.save_frame(str(img_path), t=target_sec)
+                        st.session_state.last_img = img_path
+                        st.session_state.current_ts = seconds_to_hms(
+                            target_sec
+                        )
                 except Exception as e:
                     st.error(f"抽出失敗: {e}")
 
         # 3. 結果表示
-        if "last_img" in st.session_state:
-            img_p = st.session_state.last_img
-            st.divider()
-            res_col1, res_col2 = st.columns(2)
-
-            with res_col1:
-                st.image(str(img_p), caption=f"取得時刻: {timestamp}")
-                with open(img_p, "rb") as f:
-                    st.download_button(
-                        "⬇️ PNGダウンロード", f, file_name=img_p.name
-                    )
-
-            with res_col2:
-                b64 = image_to_base64(img_p)
-                st.markdown("**Base64データ**")
+        with col_i:
+            if st.session_state.last_img:
+                img_p = Path(st.session_state.last_img)
+                st.divider()
+                r_col1, r_col2 = st.columns(2)
+                st.image(
+                    str(img_p),
+                    caption=f"確定時刻: {st.session_state.current_ts}",
+                )
+                b64 = base64.b64encode(img_p.read_bytes()).decode("utf-8")
                 st.code(
-                    f'<img src="data:image/png;base64,{b64}"/>',
+                    # f'<img src="data:image/png;base64,{b64}"/>',
+                    f"data:image/png;base64,{b64}",
                     language="html",
+                )
+                st.download_button(
+                    "⬇️ ダウンロード", img_p.read_bytes(), file_name=img_p.name
                 )
 
 
