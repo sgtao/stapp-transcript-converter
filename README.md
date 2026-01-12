@@ -1,5 +1,5 @@
 # stapp-transcript-converter
-[streamlit](https://streamlit.io/)のアプリ開発するためのテンプレートを作ってみる
+- YouTubeの文字起こしテキストを見やすく整理整頓する [streamlit](https://streamlit.io/) です
 
 ## コンテンツ
 - サンプルコード（[streamlit-example](https://github.com/streamlit/streamlit-example)）を追加
