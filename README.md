@@ -1,8 +1,6 @@
 # stapp-transcript-converter
-- YouTubeの文字起こしテキストを見やすく整理整頓する [streamlit](https://streamlit.io/) です
-
-## コンテンツ
-- サンプルコード（[streamlit-example](https://github.com/streamlit/streamlit-example)）を追加
+- YouTubeの文字起こしテキストを見やすく整理整頓する [streamlit](https://streamlit.io/) アプリです
+  - YouTube（とYouTube short）の動画URL からスクショ取得機能も追加
 
 ## Usage
 - [poetry cli](https://python-poetry.org/docs/)を利用する
