@@ -83,6 +83,7 @@ def initialize_session_state() -> None:
 
 def main():
     st.set_page_config(page_title=APP_TITLE, layout="wide")
+    st.page_link("main.py", label="Back to Home", icon="🏠")
     st.title(f"📸 {APP_TITLE}")
 
     # 1. URL入力と準備
