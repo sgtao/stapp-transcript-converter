@@ -8,15 +8,22 @@ import streamlit as st
 from pathlib import Path
 from moviepy import VideoFileClip
 
-# --- 設定 ---
-# システムの一時フォルダを取得（Linuxなら通常 /tmp）
+# --- 設定の集約 ---
 TEMP_BASE = Path(tempfile.gettempdir())
 IMAGE_DIR = TEMP_BASE / "stapp_images"
 IMAGE_DIR.mkdir(exist_ok=True)
-DOWNLOAD_DIR = Path("downloads")
-DOWNLOAD_DIR.mkdir(exist_ok=True)
 
 APP_TITLE = "YouTube Local Screenshoter"
+
+
+def convert_short_url(url: str) -> str:
+    if "youtube.com/shorts" in url:
+        id = url.split("/")[-1].split("?")[0]
+        return f"https://youtu.be/{id}"
+    elif url is None:
+        return ""
+    else:
+        return url
 
 
 def get_video_id(url: str) -> str | None:
@@ -29,18 +36,18 @@ def get_video_id(url: str) -> str | None:
 
 def download_video_low_res(url: str) -> Path | None:
     video_id = get_video_id(url)
+    st.session_state.video_id = video_id
+    st.session_state.video_url = url
     if not video_id:
         return None
 
-    # /tmp/video_id.mp4 として保存
+    # /tmp/video_id.mp4
     output_path = TEMP_BASE / f"{video_id}.mp4"
-
     if output_path.exists():
         return output_path
 
     try:
-        with st.spinner("YouTubeから低画質動画を取得中..."):
-            # 再生互換性を高めるため mp4 を強制
+        with st.spinner("低画質動画を /tmp に準備中..."):
             subprocess.run(
                 [
                     "yt-dlp",
@@ -55,122 +62,129 @@ def download_video_low_res(url: str) -> Path | None:
             )
         return output_path
     except Exception as e:
-        st.error(f"ダウンロード失敗: {e}")
+        st.error(f"DL失敗: {e}")
         return None
 
 
 def seconds_to_hms(total_seconds: float) -> str:
-    """秒数を hh:mm:ss 形式に変換"""
     return str(datetime.timedelta(seconds=int(total_seconds)))
 
 
-def timestamp_to_seconds(ts_str: str) -> float:
-    try:
-        parts = list(map(int, ts_str.split(":")))
-        if len(parts) == 3:
-            return parts[0] * 3600 + parts[1] * 60 + parts[2]
-        if len(parts) == 2:
-            return parts[0] * 60 + parts[1]
-        return float(parts[0])
-    except Exception as e:
-        st.error(f"conver timestamp failed: {e}")
-        return 0.0
-
-
-def image_to_base64(image_path: Path) -> str:
-    with open(image_path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
+def initialize_session_state() -> None:
+    if "video_url" not in st.session_state:
+        st.session_state.video_url = None
+    if "video_path" not in st.session_state:
+        st.session_state.video_id = None
+    if "video_path" not in st.session_state:
+        st.session_state.video_path = None
+    if "last_img" not in st.session_state:
+        st.session_state.last_img = None
 
 
 def main():
     st.set_page_config(page_title=APP_TITLE, layout="wide")
     st.title(f"📸 {APP_TITLE}")
 
-    # セッション状態の初期化
-    if "video_path" not in st.session_state:
-        st.session_state.video_path = None
-    if "last_img" not in st.session_state:
-        st.session_state.last_img = None
+    # 1. URL入力と準備
+    video_url = st.text_input(
+        label="YouTube URL",
+        placeholder="https://...",
+        # value=st.session_state.video_url,
+    )
+    video_url = convert_short_url(video_url)
 
-    # 1. 入力エリア
-    video_url = st.text_input("YouTube URL", placeholder="https://...")
-
+    # ダウンロード前のプレビュー
+    # if video_url and not st.session_state.video_path:
     if video_url:
-        with st.expander(
-            "動画を確認する（ここでの再生位置は取得できません）", expanded=True
-        ):
-            st.video(video_url)
-
-        if st.button("📥 動画を取得する"):
+        st.video(video_url)
+        st.divider()
+        st.subheader("1. 動画を取得")
+        if st.button("📥 この動画を取得して編集を開始する", type="primary"):
             path = download_video_low_res(video_url)
             if path:
                 st.session_state.video_path = path
                 st.rerun()
 
-    # 2. メインエリア
+    # 2. メイン操作エリア（ダウンロード後）
     if st.session_state.video_path:
         video_path = Path(st.session_state.video_path)
 
+        st.success(f"準備完了: {video_path.name}")
+        if st.button("🔄 別の動画に変更"):
+            st.session_state.video_path = None
+            st.session_state.clear()
+            st.rerun()
+
         st.divider()
-        # col_v, col_c = st.columns([2, 1])
-        col_c, col_i = st.columns(2)
+        # col_video, col_ctrl = st.columns([1.5, 1])
+        col_left, col_right = st.columns([1, 1.5])
 
-        # with col_v:
-        #     st.caption(f"動画保存先: {video_path}")
-        #     if st.button("動画再生"):
-        #         # 【重要】パスではなくバイナリを渡すことで再生トラブルを回避
-        #         video_bytes = video_path.read_bytes()
-        #         st.video(video_bytes)
+        # with col_video:
+        #     st.subheader("1. 動画を再生して時間を確認")
+        #     # バイナリ読み込みで再生を安定化
+        #     st.video(video_path.read_bytes())
+        #     st.info("再生バーに表示される時間を下の入力欄に入れてください。")
 
-        with col_c:
-            st.subheader("スクショ操作")
+        # with col_ctrl:
+        with col_left:
+            st.subheader("2. スクショ確定")
 
-            # 秒単位での指定（1秒毎の表示に対応しやすい）
+            # 数値入力
             target_sec = st.number_input(
-                "抽出したい秒数 (秒)",
+                "秒数を指定",
                 min_value=0,
                 value=0,
                 step=1,
-                help="再生バーの時間を入力してください",
+                help="再生バーの秒数を入力してください",
             )
 
-            st.info(f"確定予定時刻: {seconds_to_hms(target_sec)}")
+            # HMS形式で確認表示
+            current_hms = seconds_to_hms(target_sec)
+            st.metric("ターゲット時間", current_hms)
 
-            if st.button("📸 この瞬間のスクショを確定", type="primary"):
-                safe_ts = seconds_to_hms(target_sec).replace(":", "-")
+            if st.button(
+                "📸 スクリーンショットを保存",
+                type="primary",
+                use_container_width=True,
+            ):
+                # 要件通りのファイル名形式: screenshot-hh-mm-ss.png
+                safe_ts = current_hms.replace(":", "-")
                 img_path = IMAGE_DIR / f"screenshot-{safe_ts}.png"
 
                 try:
-                    with st.spinner("画像を抽出中..."):
+                    with st.spinner("MoviePyでフレームを抽出中..."):
                         with VideoFileClip(str(video_path)) as clip:
                             clip.save_frame(str(img_path), t=target_sec)
                         st.session_state.last_img = img_path
-                        st.session_state.current_ts = seconds_to_hms(
-                            target_sec
-                        )
+                        st.session_state.current_ts = current_hms
                 except Exception as e:
-                    st.error(f"抽出失敗: {e}")
+                    st.error(f"抽出エラー: {e}")
 
-        # 3. 結果表示
-        with col_i:
+        with col_right:
+            # 3. 取得結果の表示（コントロールカラム内に配置）
+            st.subheader("3. コピー／ダウンロード")
             if st.session_state.last_img:
+                # st.divider()
                 img_p = Path(st.session_state.last_img)
-                st.divider()
-                r_col1, r_col2 = st.columns(2)
                 st.image(
                     str(img_p),
                     caption=f"確定時刻: {st.session_state.current_ts}",
                 )
+
+                # Base64表示
                 b64 = base64.b64encode(img_p.read_bytes()).decode("utf-8")
-                st.code(
-                    # f'<img src="data:image/png;base64,{b64}"/>',
-                    f"data:image/png;base64,{b64}",
-                    language="html",
-                )
+                st.markdown("**Base64データ (imgタグ用)**")
+                st.code(f"data:image/png;base64,{b64}", language="text")
+
                 st.download_button(
-                    "⬇️ ダウンロード", img_p.read_bytes(), file_name=img_p.name
+                    "⬇️ PNGをダウンロード",
+                    img_p.read_bytes(),
+                    file_name=f"screenshot-{st.session_state.current_ts}.png",
+                    mime="image/png",
+                    use_container_width=True,
                 )
 
 
 if __name__ == "__main__":
+    initialize_session_state()
     main()
