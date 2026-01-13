@@ -1,12 +1,13 @@
 # 12_youtube_screenshot.py (MoviePy版)
 import base64
 import datetime
-import subprocess
+# import subprocess
 import tempfile
 
 import streamlit as st
 from pathlib import Path
 from moviepy import VideoFileClip
+from yt_dlp import YoutubeDL
 
 # --- 設定の集約 ---
 TEMP_BASE = Path(tempfile.gettempdir())
@@ -46,20 +47,18 @@ def download_video_low_res(url: str) -> Path | None:
     if output_path.exists():
         return output_path
 
+    # yt-dlp ライブラリ用のオプション設定
+    ydl_opts = {
+        'format': 'worst[ext=mp4]/worst',  # 低画質MP4を指定
+        'outtmpl': str(output_path),       # 出力先パス（ファイル名含む）
+        'quiet': True,                     # ログ出力を抑制
+        'no_warnings': True,               # 警告を非表示
+    }
     try:
         with st.spinner("低画質動画を /tmp に準備中..."):
-            subprocess.run(
-                [
-                    "yt-dlp",
-                    "-f",
-                    "worst[ext=mp4]/worst",
-                    "-o",
-                    str(output_path),
-                    url,
-                ],
-                check=True,
-                capture_output=True,
-            )
+            with YoutubeDL(ydl_opts) as ydl:
+                # downloadメソッドはリスト形式でURLを受け取ります
+                ydl.download([url])
         return output_path
     except Exception as e:
         st.error(f"DL失敗: {e}")
