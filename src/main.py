@@ -15,8 +15,8 @@ st.page_link(
     icon="🎬",
 )
 st.page_link(
-    "pages/12_youtube_screenshot.py",
-    label="Go to YouTube screenshot",
+    "pages/12_yt_frame_capture.py",
+    label="Go to YouTube Frame Capture",
     icon="📸",
 )
 

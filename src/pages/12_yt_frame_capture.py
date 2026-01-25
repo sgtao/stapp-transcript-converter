@@ -1,4 +1,4 @@
-# 12_youtube_screenshot.py (MoviePy版)
+# 12_yt_frame_capture.py
 import base64
 import datetime
 
@@ -15,7 +15,7 @@ TEMP_BASE = Path(tempfile.gettempdir())
 IMAGE_DIR = TEMP_BASE / "stapp_images"
 IMAGE_DIR.mkdir(exist_ok=True)
 
-APP_TITLE = "YouTube Local Screenshoter"
+APP_TITLE = "YouTube Frame Capture"
 
 
 def convert_short_url(url: str) -> str:
@@ -109,7 +109,9 @@ def main():
         st.divider()
         if st.session_state.video_path is None:
             st.subheader("1. 動画を取得")
-            if st.button("📥 この動画を取得して編集を開始する", type="primary"):
+            if st.button(
+                "📥 この動画を取得して編集を開始する", type="primary"
+            ):
                 path = download_video_low_res(video_url)
                 if path:
                     st.session_state.video_path = path
@@ -215,7 +217,6 @@ def main():
             st.session_state.video_path = None
             st.session_state.clear()
             st.rerun()
-
 
 
 if __name__ == "__main__":
