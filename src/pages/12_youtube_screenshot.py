@@ -50,10 +50,14 @@ def download_video_low_res(url: str) -> Path | None:
 
     # yt-dlp ライブラリ用のオプション設定
     ydl_opts = {
-        "format": "worst[ext=mp4]/worst",  # 低画質MP4を指定
-        "outtmpl": str(output_path),  # 出力先パス（ファイル名含む）
-        "quiet": True,  # ログ出力を抑制
-        "no_warnings": True,  # 警告を非表示
+        # 1. 映像と音声をセットで取得し、かつ「一番マシな低画質」を狙う
+        "format": "bestvideo[ext=mp4][vcodec^=avc1]+"
+        + "bestaudio[ext=m4a]/worst[ext=mp4]/worst",
+        "outtmpl": str(output_path),
+        # 2. 強制的にmp4として結合（FFmpegが必要）
+        "merge_output_format": "mp4",  # 強制的にmp4で結合
+        "quiet": True,
+        "no_warnings": True,
     }
     try:
         with st.spinner("低画質動画を /tmp に準備中..."):
@@ -66,8 +70,8 @@ def download_video_low_res(url: str) -> Path | None:
         return None
 
 
-def seconds_to_hms(total_seconds: float) -> str:
-    return str(datetime.timedelta(seconds=int(total_seconds)))
+def seconds_to_hms(seconds: float) -> str:
+    return str(datetime.timedelta(seconds=int(seconds)))
 
 
 def initialize_session_state() -> None:
@@ -79,6 +83,10 @@ def initialize_session_state() -> None:
         st.session_state.video_path = None
     if "last_img" not in st.session_state:
         st.session_state.last_img = None
+    if "current_ts" not in st.session_state:
+        st.session_state.current_ts = "00:00:00"
+    if "target_sec" not in st.session_state:
+        st.session_state.target_sec = 0
 
 
 def main():
@@ -99,24 +107,19 @@ def main():
     if video_url:
         st.video(video_url)
         st.divider()
-        st.subheader("1. 動画を取得")
-        if st.button("📥 この動画を取得して編集を開始する", type="primary"):
-            path = download_video_low_res(video_url)
-            if path:
-                st.session_state.video_path = path
-                st.rerun()
+        if st.session_state.video_path is None:
+            st.subheader("1. 動画を取得")
+            if st.button("📥 この動画を取得して編集を開始する", type="primary"):
+                path = download_video_low_res(video_url)
+                if path:
+                    st.session_state.video_path = path
+                    st.rerun()
 
     # 2. メイン操作エリア（ダウンロード後）
     if st.session_state.video_path:
         video_path = Path(st.session_state.video_path)
-
         st.success(f"準備完了: {video_path.name}")
-        if st.button("🔄 別の動画に変更"):
-            st.session_state.video_path = None
-            st.session_state.clear()
-            st.rerun()
 
-        st.divider()
         # col_video, col_ctrl = st.columns([1.5, 1])
         col_left, col_right = st.columns([1, 1.5])
 
@@ -130,18 +133,39 @@ def main():
         with col_left:
             st.subheader("2. スクショ確定")
 
-            # 数値入力
-            target_sec = st.number_input(
-                "秒数を指定",
-                min_value=0,
-                value=0,
-                step=1,
-                help="再生バーの秒数を入力してください",
-            )
+            # --- 入力方式の選択 ---
+            switch_second = st.toggle("秒数で指定")
+            target_sec = 0
+
+            if switch_second:
+                target_sec = st.number_input(
+                    "秒数を指定",
+                    min_value=0,
+                    # value=0,
+                    value=st.session_state.target_sec,
+                    step=1,
+                    help="秒数を入力してください",
+                )
+
+            else:
+                time_str = st.text_input(
+                    "時刻を指定 (hh:mm:ss)",
+                    # value="00:00:00",
+                    value=st.session_state.current_ts,
+                    help="例: 01:23:45",
+                )
+
+                try:
+                    h, m, s = map(int, time_str.split(":"))
+                    target_sec = h * 3600 + m * 60 + s
+                    current_hms = time_str
+                except ValueError:
+                    st.error("時刻は hh:mm:ss 形式で入力してください")
+                    current_hms = "00:00:00"
 
             # HMS形式で確認表示
             current_hms = seconds_to_hms(target_sec)
-            st.metric("ターゲット時間", current_hms)
+            st.metric("ターゲット時間", f"{current_hms} ({target_sec})")
 
             if st.button(
                 "📸 スクリーンショットを保存",
@@ -157,6 +181,7 @@ def main():
                         with VideoFileClip(str(video_path)) as clip:
                             clip.save_frame(str(img_path), t=target_sec)
                         st.session_state.last_img = img_path
+                        st.session_state.target_sec = target_sec
                         st.session_state.current_ts = current_hms
                 except Exception as e:
                     st.error(f"抽出エラー: {e}")
@@ -184,6 +209,13 @@ def main():
                     mime="image/png",
                     use_container_width=True,
                 )
+
+        st.divider()
+        if st.button("🔄 別の動画に変更"):
+            st.session_state.video_path = None
+            st.session_state.clear()
+            st.rerun()
+
 
 
 if __name__ == "__main__":
