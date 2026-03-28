@@ -2,7 +2,7 @@
 import streamlit as st
 from typing import List
 
-from logic.add_subsections_to_transcript import add_subsections_to_transcript
+from logic.convert_transcript import convert_transcript
 from ui.SideMenus import SideMenus
 
 APP_TITLE = "Transcript Subsection Converter"
@@ -56,7 +56,7 @@ def main() -> None:
                 st.warning("文字起こし文を入力してください")
             else:
                 st.session_state.original_text = original_text
-                converted_text = add_subsections_to_transcript(original_text)
+                converted_text = convert_transcript(original_text)
                 st.session_state.converted_text = converted_text
                 st.session_state.subsections = extract_subsections(
                     converted_text
