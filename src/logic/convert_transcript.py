@@ -31,32 +31,38 @@ def convert_transcript(text: str) -> str:
         r"(?:\d+ 分 \d+ 秒|\d+ 秒)?"       # 日本語秒数読み上げ（オプション）
         r"(.*)$"                           # 実際のテキスト
     )
-    chapter_pattern = re.compile(r"^チャプター \d+:")
     skip_lines = {"文字起こし", "## 文字起こし"}
 
     output: List[str] = []
+    after_timestamp_only = False  # タイムスタンプのみの行の直後かどうか
+
     for line in text.splitlines():
         stripped = line.strip()
 
         if not stripped or stripped in skip_lines:
             continue
 
-        # チャプター見出し → ### 形式に変換
-        if chapter_pattern.match(stripped):
-            if output:
-                output.append("")
-            output.append(f"### {stripped}")
-            continue
-
-        # タイムスタンプ行 → `{timestamp} {text}` 形式に変換
+        # タイムスタンプ行の処理
         m = timestamp_line_pattern.match(stripped)
         if m:
             timestamp = m.group(1)
             content = m.group(2).strip()
+            if not content:
+                # タイムスタンプのみの行 → そのまま出力し、次行をテキスト行として扱う
+                output.append(timestamp)
+                after_timestamp_only = True
+                continue
+            # タイムスタンプ + テキスト → `{timestamp} {text}`
             output.append(f"{timestamp} {content}")
+            after_timestamp_only = False
             continue
 
-        # その他の行はそのまま出力
-        output.append(stripped)
+        if after_timestamp_only:
+            # タイムスタンプの次の行はそのまま出力
+            output.append(stripped)
+        else:
+            # タイムスタンプに紐づかない行 → セクション見出し
+            output.append(f"### {stripped}")
+        after_timestamp_only = False
 
     return "\n".join(output).rstrip() + "\n"
